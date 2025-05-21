@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Batalha Naval dos Gatinhos 🐱⚓</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Baloo+2&display=swap');
+
+  body {
+    margin: 0;
+    padding: 20px;
+    font-family: 'Baloo 2', cursive, Arial, sans-serif;
+    background: #fff8f0;
+    color: #444;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  h1 {
+    font-size: 2.5rem;
+    margin-bottom: 0;
+    color: #a0522d;
+    text-shadow: 1px 1px 3px #e0b397;
+  }
+  h2 {
+    margin: 5px 0 20px 0;
+    font-weight: 600;
+    font-size: 1.2rem;
+    color: #7a491a;
+  }
+  .boards {
+    display: flex;
+    gap: 40px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .board {
+    display: grid;
+    grid-template-columns: repeat(6, 40px);
+    grid-template-rows: repeat(6, 40px);
+    gap: 5px;
+    background: #f0e1d2;
+    padding: 15px;
+    border-radius: 20px;
+    box-shadow: 0 6px 12px #d7bfa8;
+  }
+  .board-label {
+    text-align: center;
+    margin-bottom: 10px;
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: #7a491a;
+  }
+  .cell {
+    width: 40px;
+    height: 40px;
+    background: #fdf6f0;
+    border-radius: 10px;
+    cursor: pointer;
+    box-shadow: inset 0 3px 5px #e2cbbd;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.35rem;
+    user-select: none;
+    position: relative;
+    transition: background-color 0.3s ease;
+  }
+  .cell.ship {
+    background: #c3a57a;
+    box-shadow: inset 0 3px 7px #b79063;
+  }
+  .cell.ship.owner {
+    background: #d7bfa8;
+  }
+  .cell.hit {
+    background: #ffb3b3;
+    animation: hitflash 0.5s ease forwards;
+  }
+  .cell.miss {
+    background: #add8e6;
+    animation: missflash 0.5s ease forwards;
+  }
+  @keyframes hitflash {
+    0% { background: #ff5656;}
+    100% { background: #ffb3b3;}
+  }
+  @keyframes missflash {
+    0% { background: #56a0ff;}
+    100% { background: #add8e6;}
+  }
+  .message {
+    margin-top: 20px;
+    font-weight: 700;
+    font-size: 1.3rem;
+    color: #a45136;
+    min-height: 1.5em;
+    user-select: none;
+  }
+  button {
+    margin-top: 30px;
+    background-color: #a75e36;
+    color: #fff;
+    border: none;
+    border-radius: 25px;
+    padding: 12px 40px;
+    font-size: 1.2rem;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 4px 10px #7b4523;
+    transition: background-color 0.3s ease;
+  }
+  button:hover {
+    background-color: #d37e3a;
+    box-shadow: 0 0 20px #d37e3a;
+  }
+  .legend {
+    margin-top: 20px;
+    font-size: 0.9rem;
+    color: #7a491a;
+  }
+  .legend span {
+    display: inline-flex;
+    align-items: center;
+    margin-right: 15px;
+  }
+  .legend .shipbox, .legend .hitbox, .legend .missbox {
+    width: 18px;
+    height: 18px;
+    border-radius: 5px;
+    margin-right: 6px;
+    display: inline-block;
+  }
+  .legend .shipbox {
+    background: #c3a57a;
+  }
+  .legend .hitbox {
+    background: #ffb3b3;
+  }
+  .legend .missbox {
+    background: #add8e6;
+  }
+</style>
+</head>
+<body>
+
+<h1>Batalha Naval dos Gatinhos 🐱⚓</h1>
+<h2>Coloque seus barcos-gatinhos e derrube os do inimigo! 😼🐾</h2>
+
+<div class="boards">
+  <div>
+    <div class="board-label">Seu Tabuleiro 🐱</div>
+    <div id="playerBoard" class="board" role="grid" aria-label="Tabuleiro do jogador"></div>
+  </div>
+  <div>
+    <div class="board-label">Tabuleiro do Inimigo 🐭</div>
+    <div id="enemyBoard" class="board" role="grid" aria-label="Tabuleiro do inimigo"></div>
+  </div>
+</div>
+
+<div class="message" id="message" aria-live="polite"></div>
+<button id="btnReset" aria-label="Reiniciar o jogo">Reiniciar Batalha Naval Fofinha</button>
+
+<div class="legend" aria-label="Legenda dos símbolos do jogo">
+  <span><div class="shipbox"></div> Barco-gatinho</span>
+  <span><div class="hitbox"></div> Acerto (hit)</span>
+  <span><div class="missbox"></div> Água (miss)</span>
+</div>
+
+<script>
+(() => {
+  const playerBoardEl = document.getElementById('playerBoard');
+  const enemyBoardEl = document.getElementById('enemyBoard');
+  const messageEl = document.getElementById('message');
+  const resetBtn = document.getElementById('btnReset');
+
+  const BOARD_SIZE = 6;
+  const PLAYER = 'player';
+  const ENEMY = 'enemy';
+
+  // Ship sizes - small for quick game
+  const SHIP_SIZES = [3, 2, 2];
+
+  // Boards: 2D arrays of objects: {ship: boolean, hit: boolean}
+  let playerBoard = [];
+  let enemyBoard = [];
+
+  // Ships info for both - array of ships with their cells (positions)
+  let playerShips = [];
+  let enemyShips = [];
+
+  // Game states
+  let isPlayerTurn = false;
+  let gameIsOver = false;
+
+  // To track ship placement phase
+  let placingShips = true;
+  let currentShipIndex = 0;
+  let currentShipCells = [];
+
+  // Utilities for board creation
+  function createEmptyBoard() {
+    return Array.from({length: BOARD_SIZE}, () => Array.from({length: BOARD_SIZE}, () => ({
+      ship: false,
+      hit: false,
+    })));
+  }
+
+  // Render boards
+  function renderBoard(board, boardEl, owner) {
+    boardEl.innerHTML = '';
+    for(let r = 0; r < BOARD_SIZE; r++) {
+      for(let c = 0; c < BOARD_SIZE; c++) {
+        const cell = document.createElement('div');
+        cell.classList.add('cell');
+        cell.setAttribute('data-row', r);
+        cell.setAttribute('data-col', c);
+        cell.setAttribute('tabindex', 0);
+        cell.setAttribute('role', 'gridcell');
+        cell.setAttribute('aria-label', `Linha ${r + 1} Coluna ${c + 1}`);
+
+        const cellData = board[r][c];
+
+        if(owner === PLAYER && cellData.ship) {
+          // Show ship location on player's board
+          cell.classList.add('ship', 'owner');
+          cell.textContent = "🐈";
+        }
+
+        if(cellData.hit) {
+          if(cellData.ship) {
+            cell.classList.add('hit');
+            cell.textContent = '💥'; // explosion emoji for hit
+          } else {
+            cell.classList.add('miss');
+            cell.textContent = '➰'; // water splash emoji for miss
+          }
+        }
+
+        boardEl.appendChild(cell);
+      }
+    }
+  }
+
+  // Place ships randomly for enemy
+  function placeEnemyShipsRandomly() {
+    enemyShips = [];
+    enemyBoard = createEmptyBoard();
+
+    SHIP_SIZES.forEach(size => {
+      let placed = false;
+      while(!placed) {
+        const isHorizontal = Math.random() < 0.5;
+        const row = Math.floor(Math.random() * BOARD_SIZE);
+        const col = Math.floor(Math.random() * BOARD_SIZE);
+
+        // Check if ship fits and no collision
+        const positions = [];
+        for(let i=0; i<size; i++) {
+          const r = isHorizontal ? row : row + i;
+          const c = isHorizontal ? col + i : col;
+          if(r >= BOARD_SIZE || c >= BOARD_SIZE) {
+            break;
+          }
+          positions.push([r,c]);
+        }
+        if(positions.length !== size) continue;
+
+        const collision = positions.some(([r,c]) => enemyBoard[r][c].ship);
+        if(collision) continue;
+
+        // Place ship
+        positions.forEach(([r,c]) => {
+          enemyBoard[r][c].ship = true;
+        });
+        enemyShips.push({positions, hits: 0});
+        placed = true;
+      }
+    });
+  }
+
+  // Player places ships by clicking cells
+  function playerBoardClickHandler(e) {
+    if(!placingShips) return;
+
+    if(e.target.classList.contains('cell')) {
+      const row = +e.target.getAttribute('data-row');
+      const col = +e.target.getAttribute('data-col');
+
+      // Check if currentShipCells is empty or continuing placement
+      if(currentShipCells.length === 0) {
+        // Start placing first cell of current ship
+        if(playerBoard[row][col].ship) return;
+        currentShipCells.push([row,col]);
+        e.target.classList.add('ship', 'owner');
+        e.target.textContent = "🐈";
+        messageEl.textContent = `Coloque a parte 2 de ${SHIP_SIZES[currentShipIndex]} do barco-gatinho.`;
+
+      } else {
+        // Add next cells only if contiguous and aligned with the first cells to form ship
+        if(playerBoard[row][col].ship) return;
+
+        if(!isValidShipPlacement(currentShipCells, [row,col], SHIP_SIZES[currentShipIndex])) {
+          messageEl.textContent = `Posição inválida para o barco-gatinho. Coloque células contíguas na mesma linha ou coluna.`;
+          return;
+        }
+
+        currentShipCells.push([row,col]);
+        // Mark cell visually
+        e.target.classList.add('ship', 'owner');
+        e.target.textContent = "🐈";
+
+        if(currentShipCells.length === SHIP_SIZES[currentShipIndex]) {
+          // Finish placing this ship
+          currentShipCells.forEach(([r,c]) => {
+            playerBoard[r][c].ship = true;
+          });
+          playerShips.push({positions: currentShipCells.slice(), hits: 0});
+          currentShipCells = [];
+          currentShipIndex++;
+
+          if(currentShipIndex === SHIP_SIZES.length) {
+            // End placing phase
+            placingShips = false;
+            messageEl.textContent = 'Batalha começa! É sua vez, ataque o tabuleiro do inimigo clicando nas células à direita! 🐾';
+            isPlayerTurn = true;
+          } else {
+            messageEl.textContent = `Coloque a parte 1 de ${SHIP_SIZES[currentShipIndex]} do próximo barco-gatinho.`;
+          }
+        } else {
+          messageEl.textContent = `Coloque a parte ${currentShipCells.length + 1} de ${SHIP_SIZES[currentShipIndex]} do barco-gatinho.`;
+        }
+      }
+    }
+  }
+
+  // Check if next cell is valid placement for current ship
+  function isValidShipPlacement(placedCells, candidateCell, shipSize) {
+    if(placedCells.length === 0) return true;
+    const [r0,c0] = placedCells[0];
+    const [r,c] = candidateCell;
+
+    // Must be in same row or same column
+    if(r !== r0 && c !== c0) return false;
+
+    // Must be contiguous (no gaps)
+    const coords = [...placedCells, candidateCell];
+    coords.sort((a,b) => r0 === r ? a[1]-b[1] : a[0]-b[0]); // sort by col if row same, else by row
+
+    for(let i=1; i<coords.length; i++) {
+      const [ra, ca] = coords[i-1];
+      const [rb, cb] = coords[i];
+      if(r0 === r) {
+        // same row, columns must be consecutive
+        if(cb !== ca + 1) return false;
+      } else {
+        // same col, rows must be consecutive
+        if(rb !== ra + 1) return false;
+      }
+    }
+
+    // Cannot exceed shipSize
+    if(coords.length > shipSize) return false;
+
+    return true;
+  }
+
+  // Enemy clicks (random) on player board after player turn
+  function enemyTurn() {
+    if(gameIsOver) return;
+
+    messageEl.textContent = 'Turno do inimigo...';
+
+    setTimeout(() => {
+      let row, col;
+      do {
+        row = Math.floor(Math.random() * BOARD_SIZE);
+        col = Math.floor(Math.random() * BOARD_SIZE);
+      } while(playerBoard[row][col].hit);
+
+      playerBoard[row][col].hit = true;
+
+      if(playerBoard[row][col].ship) {
+        messageEl.textContent = `Inimigo acertou seu barco-gatinho na linha ${row+1}, coluna ${col+1}! 😿💥`;
+        markShipHit(playerShips, row, col);
+
+        if(checkAllShipsSunk(playerShips)) {
+          messageEl.textContent = '😿 Você perdeu! Todos seus barcos-gatinhos foram afundados!';
+          gameIsOver = true;
+          return;
+        }
+      } else {
+        messageEl.textContent = `Inimigo errou na linha ${row+1}, coluna ${col+1}. Sua vez!`;
+      }
+
+      renderBoard(playerBoard, playerBoardEl, PLAYER);
+      isPlayerTurn = true;
+    }, 1200);
+  }
+
+  // Player clicks on enemy board to attack
+  function enemyBoardClickHandler(e) {
+    if(placingShips || !isPlayerTurn || gameIsOver) return;
+    if(e.target.classList.contains('cell')) {
+      const row = +e.target.getAttribute('data-row');
+      const col = +e.target.getAttribute('data-col');
+      if(enemyBoard[row][col].hit) {
+        messageEl.textContent = 'Você já atacou essa célula, tente outra.';
+        return;
+      }
+      enemyBoard[row][col].hit = true;
+
+      if(enemyBoard[row][col].ship) {
+        messageEl.textContent = 'Você acertou um barco-gatinho inimigo! 😻💥';
+        markShipHit(enemyShips, row, col);
+        if(checkAllShipsSunk(enemyShips)) {
+          messageEl.textContent = '🎉 Parabéns! Você venceu a batalha naval dos gatinhos! 🐱⚓';
+          gameIsOver = true;
+          renderBoard(enemyBoard, enemyBoardEl, ENEMY);
+          return;
+        }
+      } else {
+        messageEl.textContent = 'Água! Errou o ataque, mas tente de novo depois.... 🐟';
+      }
+
+      renderBoard(enemyBoard, enemyBoardEl, ENEMY);
+      isPlayerTurn = false;
+
+      enemyTurn();
+    }
+  }
+
+  function markShipHit(ships, row, col) {
+    ships.forEach(ship => {
+      ship.positions.forEach(([r, c]) => {
+        if(r === row && c === col) {
+          ship.hits++;
+        }
+      });
+    });
+  }
+
+  function checkAllShipsSunk(ships) {
+    return ships.every(ship => ship.hits >= ship.positions.length);
+  }
+
+  // Setup and start
+  function setupGame() {
+    playerBoard = createEmptyBoard();
+    enemyBoard = createEmptyBoard();
+    playerShips = [];
+    enemyShips = [];
+    isPlayerTurn = false;
+    gameIsOver = false;
+    placingShips = true;
+    currentShipIndex = 0;
+    currentShipCells = [];
+    messageEl.textContent = `Coloque a parte 1 de ${SHIP_SIZES[0]} do barco-gatinho no seu tabuleiro clicando nas células.`;
+
+    renderBoard(playerBoard, playerBoardEl, PLAYER);
+    renderBoard(enemyBoard, enemyBoardEl, ENEMY);
+
+    placeEnemyShipsRandomly();
+  }
+
+  // Events
+  playerBoardEl.addEventListener('click', playerBoardClickHandler);
+  enemyBoardEl.addEventListener('click', enemyBoardClickHandler);
+  resetBtn.addEventListener('click', setupGame);
+
+  // Initial game setup
+  setupGame();
+
+})();
+</script>
+
+</body>
+</html>
+
